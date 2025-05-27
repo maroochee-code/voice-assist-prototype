@@ -47,4 +47,18 @@ body {
     transform: scale(1.02);
     cursor: pointer;
   }
+
+  #guide {
+    text-align: center;
+    font-size: 14px;
+    color: #666;
+    margin-top: 8px;
+    font-style: italic;
+    animation: fadein 0.8s ease-in;
+  }
+
+  @keyframes fadein {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
   

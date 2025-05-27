@@ -101,6 +101,8 @@ function speak(text) {
 
 // 📄 안내 메시지 삽입
 function showGuidanceMessage() {
-  guideText.textContent = "원하는 말이 없으면 다시 말씀해주세요.";
-  document.body.appendChild(guideText);
+    guideText.textContent = "원하는 말이 없으면 다시 말씀해주세요.";
+    if (!document.getElementById("guide")) {
+        list.parentNode.insertBefore(guideText, list.nextSibling);
+    }
 }
