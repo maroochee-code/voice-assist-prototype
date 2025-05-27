@@ -71,3 +71,25 @@ body {
     to { opacity: 1; }
   }
   
+  #mic-btn {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 90%;
+    padding: 1rem;
+    font-size: 1.2rem;
+    background-color: #4caf50;
+    color: white;
+    border: none;
+    border-radius: 0.5rem;
+    z-index: 1000;
+    text-align: center;
+  
+    /* iOS 대응 */
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+    user-select: none;
+  }
+  
+  
