@@ -113,4 +113,10 @@ document.addEventListener("visibilitychange", () => {
 micButton.addEventListener("touchstart", startListening);
 micButton.addEventListener("touchend", stopListening);
 micButton.addEventListener("mousedown", startListening);
-micButton.addEventListener("mouseup", stopListening);
+micButton.addEventListener("mouseup", () => {
+  if (isListening) {
+    isListening = false;
+    micButton.textContent = "🎤 누르고 말하세요";
+    recognition.stop(); // ✅ 여기만 수정!
+  }
+});
