@@ -32,6 +32,7 @@ function startListening() {
   statusText.textContent = "🎤 듣고 있어요... 손을 떼면 멈춰요.";
 
   recognition.start();
+  console.log("🎙 마이크 시작됨");
 }
 
 function stopListening() {
@@ -39,7 +40,9 @@ function stopListening() {
   isListening = false;
 
   micButton.textContent = "🎤 누르고 말하세요";
-  recognition.abort();
+  recognition.stop(); // ❗ 반드시 stop 사용
+
+  console.log("🛑 마이크 정지 요청됨");
 
   if (statusText && statusText.parentNode) {
     statusText.parentNode.removeChild(statusText);
@@ -50,8 +53,16 @@ function stopListening() {
   }
 }
 
+// 🎯 result 1개만 남김
 recognition.onresult = async function (event) {
+  if (!event.results || !event.results[0] || !event.results[0][0]) {
+    console.warn("❌ 결과 없음");
+    return;
+  }
+
   const text = event.results[0][0].transcript;
+  console.log("🧠 인식된 텍스트:", text);
+
   list.innerHTML = "";
 
   const suggestions = await getSuggestions(text);
@@ -71,10 +82,12 @@ recognition.onerror = function (event) {
 };
 
 recognition.onend = function () {
+  console.log("🛑 마이크 종료됨");
   stopListening();
 };
 
 async function getSuggestions(input) {
+  console.log("📨 GPT 요청:", input);
   try {
     const response = await fetch("https://voice-assist-backend.onrender.com/ask-gpt", {
       method: "POST",
@@ -103,20 +116,13 @@ function showGuidanceMessage() {
   }
 }
 
-// 🔁 안전한 마이크 종료
 window.addEventListener("beforeunload", stopListening);
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) stopListening();
 });
 
-// 📱 모바일/PC 이벤트 대응
+// ✅ 이벤트 중복 없이 1세트만 등록
+micButton.addEventListener("mousedown", startListening);
+micButton.addEventListener("mouseup", stopListening);
 micButton.addEventListener("touchstart", startListening);
 micButton.addEventListener("touchend", stopListening);
-micButton.addEventListener("mousedown", startListening);
-micButton.addEventListener("mouseup", () => {
-  if (isListening) {
-    isListening = false;
-    micButton.textContent = "🎤 누르고 말하세요";
-    recognition.stop(); // ✅ 여기만 수정!
-  }
-});
