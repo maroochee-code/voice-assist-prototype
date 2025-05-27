@@ -2,7 +2,7 @@ let recognition = null;
 let isListening = false;
 let recognitionTimeout = null;
 let isProcessing = false;
-let sessionId = Date.now(); // 디버깅용 세션 ID
+let sessionId = Date.now();
 
 const micButton = document.getElementById("mic-btn");
 const list = document.getElementById("suggestions");
@@ -29,7 +29,6 @@ function debugLog(message, data = null) {
   const logMessage = `[${timestamp}][${sessionId}] ${message}`;
   console.log(logMessage, data || '');
   
-  // iOS Safari에서 화면에도 표시 (개발용)
   if (window.location.search.includes('debug=1')) {
     const debugDiv = document.getElementById('debug-info') || createDebugDiv();
     debugDiv.innerHTML += `<div>${logMessage}</div>`;
@@ -49,7 +48,6 @@ function createDebugDiv() {
   return debugDiv;
 }
 
-// iOS Safari 호환성 체크
 function checkSpeechRecognitionSupport() {
   const isSupported = 'webkitSpeechRecognition' in window;
   debugLog('음성 인식 지원 여부:', isSupported);
@@ -61,7 +59,6 @@ function checkSpeechRecognitionSupport() {
   return true;
 }
 
-// 권한 초기화
 let isPermissionInitialized = false;
 function initializeSpeechRecognition() {
   if (isPermissionInitialized || !checkSpeechRecognitionSupport()) return;
@@ -92,14 +89,12 @@ function initializeSpeechRecognition() {
   }
 }
 
-// 사용자 첫 번째 터치/클릭에서 권한 초기화
 document.addEventListener('touchstart', initializeSpeechRecognition, { once: true });
 document.addEventListener('click', initializeSpeechRecognition, { once: true });
 
 function startListening() {
   debugLog('startListening 호출됨', { isListening, isProcessing });
   
-  // 중복 실행 방지
   if (isListening || isProcessing) {
     debugLog('이미 실행 중이므로 중단');
     return;
@@ -107,7 +102,6 @@ function startListening() {
   
   if (!checkSpeechRecognitionSupport()) return;
   
-  // 이전 recognition 완전히 정리
   cleanup();
   
   isListening = true;
@@ -120,16 +114,34 @@ function startListening() {
     // iOS Safari 최적화 설정
     recognition.lang = "ko-KR";
     recognition.interimResults = false;
-    recognition.maxAlternatives = 1;
+    recognition.maxAlternatives = 3; // 대안 늘리기
     recognition.continuous = false;
     
-    debugLog('Recognition 객체 생성 완료');
+    // 🔧 iOS Safari onresult 누락 대응: 이벤트 핸들러 먼저 등록
+    let hasResult = false;
+    let resultTimeout = null;
     
     recognition.onstart = function() {
       debugLog('🎙️ onstart 이벤트 발생');
+      
+      // 🚨 iOS Safari 대응: onstart 후 4초 내에 onresult가 없으면 강제로 처리
+      resultTimeout = setTimeout(() => {
+        if (!hasResult && isListening) {
+          debugLog('⚠️ onresult 누락 감지 - 음성이 인식되지 않음');
+          displaySuggestions(['음성이 명확하게 인식되지 않았습니다.', '다시 한번 또렷하게 말씀해주세요.']);
+          showGuidanceMessage();
+          stopListening();
+        }
+      }, 4000);
     };
 
     recognition.onresult = async function(event) {
+      hasResult = true;
+      if (resultTimeout) {
+        clearTimeout(resultTimeout);
+        resultTimeout = null;
+      }
+      
       debugLog('🎯 onresult 이벤트 발생');
       
       if (!event.results?.[0]?.[0]) {
@@ -138,9 +150,36 @@ function startListening() {
         return;
       }
       
-      const text = event.results[0][0].transcript.trim();
-      const confidence = event.results[0][0].confidence;
+      // 여러 대안 중 가장 신뢰도 높은 것 선택
+      let bestResult = null;
+      let bestConfidence = 0;
+      
+      for (let i = 0; i < event.results[0].length; i++) {
+        const result = event.results[0][i];
+        if (result.confidence > bestConfidence) {
+          bestConfidence = result.confidence;
+          bestResult = result;
+        }
+      }
+      
+      if (!bestResult) {
+        debugLog('유효한 결과 없음');
+        stopListening();
+        return;
+      }
+      
+      const text = bestResult.transcript.trim();
+      const confidence = bestResult.confidence;
       debugLog('인식된 텍스트:', { text, confidence });
+      
+      // 신뢰도가 너무 낮으면 재시도 요청
+      if (confidence < 0.3) {
+        debugLog('신뢰도가 낮음:', confidence);
+        displaySuggestions(['음성 인식의 정확도가 낮습니다.', '조용한 곳에서 다시 시도해주세요.']);
+        showGuidanceMessage();
+        stopListening();
+        return;
+      }
       
       if (!text) {
         debugLog('빈 텍스트로 인해 중단');
@@ -148,29 +187,46 @@ function startListening() {
         return;
       }
       
-      // API 호출 전 UI 업데이트
       updateUI('processing');
       await handleRecognizedText(text);
     };
 
     recognition.onerror = function(event) {
       debugLog('🚨 onerror 이벤트:', event.error);
+      
+      if (resultTimeout) {
+        clearTimeout(resultTimeout);
+        resultTimeout = null;
+      }
+      
       handleRecognitionError(event.error);
       stopListening();
     };
 
     recognition.onend = function() {
       debugLog('🏁 onend 이벤트 발생');
+      
+      if (resultTimeout) {
+        clearTimeout(resultTimeout);
+        resultTimeout = null;
+      }
+      
+      // onend가 발생했는데 결과가 없다면 사용자에게 알림
+      if (!hasResult && isListening) {
+        debugLog('🔇 음성이 감지되지 않음');
+        displaySuggestions(['음성이 감지되지 않았습니다.', '마이크 가까이에서 명확하게 말해주세요.']);
+        showGuidanceMessage();
+      }
+      
       if (isListening) {
         stopListening();
       }
     };
 
-    // 인식 시작
     debugLog('recognition.start() 호출');
     recognition.start();
     
-    // iOS Safari에서 3초 후 강제 종료
+    // iOS Safari에서 3초 후 강제 종료 (기존 유지)
     recognitionTimeout = setTimeout(() => {
       if (recognition && isListening) {
         debugLog('⏰ 타임아웃으로 인식 종료');
@@ -251,7 +307,6 @@ function handleRecognitionError(errorType) {
     alert(message);
   }
   
-  // 에러 메시지를 화면에 표시
   displaySuggestions([`오류: ${message}`]);
 }
 
@@ -261,19 +316,18 @@ function stopListening() {
   debugLog('🛑 stopListening 시작');
   isListening = false;
   
-  // 타이머 정리
   if (recognitionTimeout) {
     clearTimeout(recognitionTimeout);
     recognitionTimeout = null;
     debugLog('타이머 정리 완료');
   }
   
-  // recognition 정리
   if (recognition) {
     try {
       recognition.onresult = null;
       recognition.onerror = null;
       recognition.onend = null;
+      recognition.onstart = null;
       recognition.abort();
       debugLog('Recognition 객체 정리 완료');
     } catch (e) {
@@ -311,7 +365,6 @@ function cleanup() {
 function updateUI(state) {
   debugLog('UI 상태 변경:', state);
   
-  // 기존 상태 텍스트 제거
   const existingStatus = document.getElementById("status");
   if (existingStatus && existingStatus.parentNode) {
     existingStatus.parentNode.removeChild(existingStatus);
@@ -427,7 +480,6 @@ function showGuidanceMessage() {
   }
 }
 
-// 페이지 생명주기 이벤트
 window.addEventListener("beforeunload", cleanup);
 window.addEventListener("pagehide", cleanup);
 
@@ -438,7 +490,6 @@ document.addEventListener("visibilitychange", () => {
   }
 });
 
-// 버튼 이벤트
 micButton.addEventListener("touchstart", (e) => {
   e.preventDefault();
   debugLog('touchstart 이벤트');
@@ -460,12 +511,10 @@ micButton.addEventListener("click", (e) => {
   startListening();
 });
 
-// 초기화 로그
 debugLog('🚀 Voice Assist 스크립트 로드 완료');
 debugLog('📱 User Agent:', navigator.userAgent);
 debugLog('🎤 Speech Recognition 지원:', 'webkitSpeechRecognition' in window);
 
-// 디버그 모드 안내
 if (window.location.search.includes('debug=1')) {
   debugLog('🔍 디버그 모드 활성화됨');
 } else {
