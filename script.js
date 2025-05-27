@@ -2,11 +2,9 @@ const recognition = new webkitSpeechRecognition() || new SpeechRecognition();
 recognition.lang = "ko-KR";
 recognition.interimResults = false;
 
-// 버튼, 상태 텍스트, 리스트 참조
-const listenButton = document.querySelector("button");
+const micButton = document.getElementById("mic-btn");
 const list = document.getElementById("suggestions");
 
-// 상태 텍스트 (듣는 중 메시지)
 const statusText = document.createElement("p");
 statusText.id = "status";
 statusText.style.textAlign = "center";
@@ -14,57 +12,34 @@ statusText.style.fontWeight = "bold";
 statusText.style.marginTop = "10px";
 statusText.style.fontSize = "16px";
 
-// 안내 텍스트 (리스트 밑)
 const guideText = document.createElement("p");
 guideText.id = "guide";
 guideText.style.fontSize = "14px";
 guideText.style.textAlign = "center";
 guideText.style.marginTop = "12px";
 guideText.style.color = "#666";
+guideText.style.fontStyle = "italic";
+guideText.style.animation = "fadein 0.8s ease-in";
 
-// 🔘 듣기 버튼 누르면 실행
+let isListening = false;
+
 function startListening() {
-  listenButton.textContent = "🎙 듣는 중...";
-  listenButton.disabled = true;
+  if (isListening) return;
+  isListening = true;
 
-  statusText.textContent = "🎤 듣고 있어요... 말해보세요.";
-  document.body.insertBefore(statusText, listenButton);
+  micButton.textContent = "🎙 듣는 중...";
+  document.body.insertBefore(statusText, micButton);
+  statusText.textContent = "🎤 듣고 있어요... 손을 떼면 멈춰요.";
 
-  // UI 반영을 위해 약간의 대기 (모바일 대응)
-  setTimeout(() => {
-    recognition.start();
-  }, 1000); // 1초 대기
+  recognition.start();
 }
 
-// 🎤 음성 인식 결과 수신
-recognition.onresult = async function (event) {
-  const text = event.results[0][0].transcript;
-  list.innerHTML = ""; // 리스트 초기화
+function stopListening() {
+  if (!isListening) return;
+  isListening = false;
 
-  const suggestions = await getSuggestions(text);
-
-  suggestions.forEach(msg => {
-    const li = document.createElement("li");
-    li.textContent = msg;
-    li.onclick = () => speak(msg);
-    list.appendChild(li);
-  });
-
-  // 안내 메시지 삽입
-  showGuidanceMessage();
-
-  resetUI(); // 버튼 복원
-};
-
-// 🛠 음성 인식 종료 시
-recognition.onend = function () {
-  resetUI();
-};
-
-// 🔁 UI 복구
-function resetUI() {
-  listenButton.textContent = "🎤 듣기 시작";
-  listenButton.disabled = false;
+  micButton.textContent = "🎤 누르고 말하세요";
+  recognition.abort();
 
   if (statusText && statusText.parentNode) {
     statusText.parentNode.removeChild(statusText);
@@ -75,7 +50,30 @@ function resetUI() {
   }
 }
 
-// 📡 GPT 문장 추천 요청
+recognition.onresult = async function (event) {
+  const text = event.results[0][0].transcript;
+  list.innerHTML = "";
+
+  const suggestions = await getSuggestions(text);
+  suggestions.forEach(msg => {
+    const li = document.createElement("li");
+    li.textContent = msg;
+    li.onclick = () => speak(msg);
+    list.appendChild(li);
+  });
+
+  showGuidanceMessage();
+};
+
+recognition.onerror = function (event) {
+  console.warn("🎤 Speech error:", event.error);
+  stopListening();
+};
+
+recognition.onend = function () {
+  stopListening();
+};
+
 async function getSuggestions(input) {
   try {
     const response = await fetch("https://voice-assist-backend.onrender.com/ask-gpt", {
@@ -92,17 +90,27 @@ async function getSuggestions(input) {
   }
 }
 
-// 🗣️ 음성 출력
 function speak(text) {
   const msg = new SpeechSynthesisUtterance(text);
   msg.lang = "ko-KR";
   speechSynthesis.speak(msg);
 }
 
-// 📄 안내 메시지 삽입
 function showGuidanceMessage() {
-    guideText.textContent = "원하는 말이 없으면 다시 말씀해주세요.";
-    if (!document.getElementById("guide")) {
-        list.parentNode.insertBefore(guideText, list.nextSibling);
-    }
+  guideText.textContent = "원하는 말이 없으면 다시 말씀해주세요.";
+  if (!document.getElementById("guide")) {
+    list.parentNode.insertBefore(guideText, list.nextSibling);
+  }
 }
+
+// 🔁 안전한 마이크 종료
+window.addEventListener("beforeunload", stopListening);
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) stopListening();
+});
+
+// 📱 모바일/PC 이벤트 대응
+micButton.addEventListener("touchstart", startListening);
+micButton.addEventListener("touchend", stopListening);
+micButton.addEventListener("mousedown", startListening);
+micButton.addEventListener("mouseup", stopListening);
