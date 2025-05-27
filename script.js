@@ -53,5 +53,6 @@ async function handleRecognizedText(input) {
   }
 
   updateUI("idle");
+  isProcessing = false; // ← 이거 꼭 있어야 됨!
   if (transcriptDisplay) transcriptDisplay.textContent = "";
 }

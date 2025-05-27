@@ -66,14 +66,15 @@ function startListening() {
   recognition.onstart = () => log("🎤 onstart event");
   recognition.onend = () => {
     log("🏁 onend event");
-    if (!isProcessing) {
-      suggestionList.innerHTML = "";
-      const li = document.createElement("li");
-      li.textContent = "음성이 인식되지 않았습니다. 다시 시도해주세요.";
-      suggestionList.appendChild(li);
+    isListening = false;
+  
+    if (isProcessing) {
+      log("⌛ GPT 응답 대기 중이라 UI 유지");
+      // 여기선 UI 복구 안 함 → script.js의 handleRecognizedText에서 함
+    } else {
+      log("🔁 인식 종료 후 UI 복구");
       updateUI("idle");
     }
-    isListening = false;
   };
 
   recognition.onerror = (e) => {
