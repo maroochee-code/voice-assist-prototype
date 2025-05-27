@@ -1,7 +1,8 @@
 let recognition = null;
 let isListening = false;
 let recognitionTimeout = null;
-let isProcessing = false; // API 처리 중 플래그
+let isProcessing = false;
+let sessionId = Date.now(); // 디버깅용 세션 ID
 
 const micButton = document.getElementById("mic-btn");
 const list = document.getElementById("suggestions");
@@ -22,36 +23,72 @@ guideText.style.color = "#666";
 guideText.style.fontStyle = "italic";
 guideText.style.animation = "fadein 0.8s ease-in";
 
+// 디버그 로그 함수
+function debugLog(message, data = null) {
+  const timestamp = new Date().toISOString().split('T')[1].split('.')[0];
+  const logMessage = `[${timestamp}][${sessionId}] ${message}`;
+  console.log(logMessage, data || '');
+  
+  // iOS Safari에서 화면에도 표시 (개발용)
+  if (window.location.search.includes('debug=1')) {
+    const debugDiv = document.getElementById('debug-info') || createDebugDiv();
+    debugDiv.innerHTML += `<div>${logMessage}</div>`;
+    debugDiv.scrollTop = debugDiv.scrollHeight;
+  }
+}
+
+function createDebugDiv() {
+  const debugDiv = document.createElement('div');
+  debugDiv.id = 'debug-info';
+  debugDiv.style.cssText = `
+    position: fixed; top: 10px; right: 10px; width: 300px; height: 200px;
+    background: rgba(0,0,0,0.8); color: white; font-size: 10px;
+    overflow-y: auto; padding: 5px; z-index: 9999; border-radius: 5px;
+  `;
+  document.body.appendChild(debugDiv);
+  return debugDiv;
+}
+
 // iOS Safari 호환성 체크
 function checkSpeechRecognitionSupport() {
-  if (!('webkitSpeechRecognition' in window)) {
+  const isSupported = 'webkitSpeechRecognition' in window;
+  debugLog('음성 인식 지원 여부:', isSupported);
+  
+  if (!isSupported) {
     alert('이 브라우저는 음성 인식을 지원하지 않습니다.');
     return false;
   }
   return true;
 }
 
-// 권한 요청을 위한 더미 recognition 생성
+// 권한 초기화
 let isPermissionInitialized = false;
 function initializeSpeechRecognition() {
   if (isPermissionInitialized || !checkSpeechRecognitionSupport()) return;
+  
+  debugLog('권한 초기화 시작');
   
   try {
     const dummyRecognition = new webkitSpeechRecognition();
     dummyRecognition.lang = "ko-KR";
     
-    // 즉시 중단하여 권한만 요청
+    dummyRecognition.onerror = function(event) {
+      debugLog('권한 초기화 에러:', event.error);
+    };
+    
     dummyRecognition.start();
     setTimeout(() => {
       try {
         dummyRecognition.abort();
-      } catch (e) {}
+        debugLog('권한 초기화 완료');
+      } catch (e) {
+        debugLog('권한 초기화 중단 실패', e.message);
+      }
     }, 10);
     
     isPermissionInitialized = true;
-    console.log('🎤 음성 인식 권한 초기화 완료');
   } catch (error) {
-    console.error('권한 초기화 실패:', error);
+    debugLog('권한 초기화 실패:', error.message);
   }
 }
 
@@ -60,9 +97,11 @@ document.addEventListener('touchstart', initializeSpeechRecognition, { once: tru
 document.addEventListener('click', initializeSpeechRecognition, { once: true });
 
 function startListening() {
+  debugLog('startListening 호출됨', { isListening, isProcessing });
+  
   // 중복 실행 방지
   if (isListening || isProcessing) {
-    console.log('이미 실행 중입니다. isListening:', isListening, 'isProcessing:', isProcessing);
+    debugLog('이미 실행 중이므로 중단');
     return;
   }
   
@@ -73,6 +112,7 @@ function startListening() {
   
   isListening = true;
   updateUI('listening');
+  debugLog('음성 인식 시작 준비');
   
   try {
     recognition = new webkitSpeechRecognition();
@@ -83,28 +123,27 @@ function startListening() {
     recognition.maxAlternatives = 1;
     recognition.continuous = false;
     
-    // iOS에서 중요: 서비스 타입 명시
-    if (recognition.serviceURI !== undefined) {
-      recognition.serviceURI = 'wss://www.google.com/speech-api/full-duplex/v1/up';
-    }
+    debugLog('Recognition 객체 생성 완료');
     
     recognition.onstart = function() {
-      console.log('🎙️ 음성 인식 시작');
+      debugLog('🎙️ onstart 이벤트 발생');
     };
 
     recognition.onresult = async function(event) {
-      console.log('🎯 음성 인식 결과 수신');
+      debugLog('🎯 onresult 이벤트 발생');
       
       if (!event.results?.[0]?.[0]) {
-        console.log('결과 없음');
+        debugLog('결과 없음');
         stopListening();
         return;
       }
       
       const text = event.results[0][0].transcript.trim();
-      console.log('인식된 텍스트:', text);
+      const confidence = event.results[0][0].confidence;
+      debugLog('인식된 텍스트:', { text, confidence });
       
       if (!text) {
+        debugLog('빈 텍스트로 인해 중단');
         stopListening();
         return;
       }
@@ -115,56 +154,63 @@ function startListening() {
     };
 
     recognition.onerror = function(event) {
-      console.error('🚨 음성 인식 오류:', event.error);
+      debugLog('🚨 onerror 이벤트:', event.error);
       handleRecognitionError(event.error);
       stopListening();
     };
 
     recognition.onend = function() {
-      console.log('🏁 음성 인식 종료');
+      debugLog('🏁 onend 이벤트 발생');
       if (isListening) {
         stopListening();
       }
     };
 
     // 인식 시작
+    debugLog('recognition.start() 호출');
     recognition.start();
     
     // iOS Safari에서 3초 후 강제 종료
     recognitionTimeout = setTimeout(() => {
       if (recognition && isListening) {
-        console.log('⏰ 타임아웃으로 인식 종료');
+        debugLog('⏰ 타임아웃으로 인식 종료');
         try {
           recognition.stop();
         } catch (e) {
-          console.log('stop() 호출 실패:', e);
+          debugLog('stop() 호출 실패:', e.message);
         }
       }
     }, 3000);
     
   } catch (error) {
-    console.error('❌ 음성 인식 시작 실패:', error);
+    debugLog('❌ 음성 인식 시작 실패:', error.message);
     handleRecognitionError('start-failed');
     stopListening();
   }
 }
 
 async function handleRecognizedText(text) {
-  if (isProcessing) return;
+  if (isProcessing) {
+    debugLog('이미 처리 중이므로 중단');
+    return;
+  }
   
+  debugLog('API 호출 시작:', text);
   isProcessing = true;
   list.innerHTML = '<li style="color: #666;">응답을 기다리는 중...</li>';
   
   try {
     const suggestions = await getSuggestions(text);
+    debugLog('API 응답 받음:', suggestions.length + '개');
     displaySuggestions(suggestions);
     showGuidanceMessage();
   } catch (error) {
-    console.error('텍스트 처리 실패:', error);
+    debugLog('텍스트 처리 실패:', error.message);
     displaySuggestions(['응답을 가져오는데 실패했습니다. 다시 시도해주세요.']);
   } finally {
     isProcessing = false;
     stopListening();
+    debugLog('handleRecognizedText 완료');
   }
 }
 
@@ -175,18 +221,21 @@ function displaySuggestions(suggestions) {
     suggestions = ['응답을 받지 못했습니다.'];
   }
   
-  suggestions.forEach(msg => {
+  suggestions.forEach((msg, index) => {
     if (msg && msg.trim()) {
       const li = document.createElement("li");
       li.textContent = msg.trim();
       li.onclick = () => speak(msg.trim());
       li.style.cursor = 'pointer';
       list.appendChild(li);
+      debugLog(`제안 ${index + 1}:`, msg.trim());
     }
   });
 }
 
 function handleRecognitionError(errorType) {
+  debugLog('음성 인식 에러 처리:', errorType);
+  
   const errorMessages = {
     'not-allowed': '마이크 권한이 거부되었습니다.\n설정 > Safari > 마이크에서 허용해주세요.',
     'no-speech': '음성이 감지되지 않았습니다.',
@@ -200,22 +249,23 @@ function handleRecognitionError(errorType) {
   
   if (errorType === 'not-allowed' || errorType === 'audio-capture') {
     alert(message);
-  } else {
-    console.log(message);
-    // 네트워크 오류가 아닌 경우 자동으로 재시도하지 않음
   }
+  
+  // 에러 메시지를 화면에 표시
+  displaySuggestions([`오류: ${message}`]);
 }
 
 function stopListening() {
   if (!isListening) return;
   
-  console.log('🛑 음성 인식 중지 시작');
+  debugLog('🛑 stopListening 시작');
   isListening = false;
   
   // 타이머 정리
   if (recognitionTimeout) {
     clearTimeout(recognitionTimeout);
     recognitionTimeout = null;
+    debugLog('타이머 정리 완료');
   }
   
   // recognition 정리
@@ -225,16 +275,20 @@ function stopListening() {
       recognition.onerror = null;
       recognition.onend = null;
       recognition.abort();
+      debugLog('Recognition 객체 정리 완료');
     } catch (e) {
-      console.log('recognition 정리 중 오류:', e);
+      debugLog('Recognition 정리 중 오류:', e.message);
     }
     recognition = null;
   }
 
   updateUI('idle');
+  debugLog('stopListening 완료');
 }
 
 function cleanup() {
+  debugLog('cleanup 시작');
+  
   if (recognitionTimeout) {
     clearTimeout(recognitionTimeout);
     recognitionTimeout = null;
@@ -243,15 +297,20 @@ function cleanup() {
   if (recognition) {
     try {
       recognition.abort();
-    } catch (e) {}
+    } catch (e) {
+      debugLog('cleanup 중 abort 실패:', e.message);
+    }
     recognition = null;
   }
   
   isListening = false;
   isProcessing = false;
+  debugLog('cleanup 완료');
 }
 
 function updateUI(state) {
+  debugLog('UI 상태 변경:', state);
+  
   // 기존 상태 텍스트 제거
   const existingStatus = document.getElementById("status");
   if (existingStatus && existingStatus.parentNode) {
@@ -288,15 +347,16 @@ function updateUI(state) {
 }
 
 async function getSuggestions(input) {
+  const requestId = Date.now();
+  debugLog(`API 요청 시작 [${requestId}]:`, input);
+  
   const controller = new AbortController();
   const timeoutId = setTimeout(() => {
-    console.log('⏰ API 요청 타임아웃');
+    debugLog(`API 요청 타임아웃 [${requestId}]`);
     controller.abort();
-  }, 15000); // 15초 타임아웃 (Render 무료 계정 고려)
+  }, 15000);
   
   try {
-    console.log('🌐 API 요청 시작:', input);
-    
     const response = await fetch("https://voice-assist-backend.onrender.com/ask-gpt", {
       method: "POST",
       headers: { 
@@ -308,19 +368,20 @@ async function getSuggestions(input) {
     });
     
     clearTimeout(timeoutId);
+    debugLog(`API 응답 상태 [${requestId}]:`, response.status);
     
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     }
     
     const data = await response.json();
-    console.log('✅ API 응답 수신:', data);
+    debugLog(`API 응답 데이터 [${requestId}]:`, data);
     
     return Array.isArray(data.suggestions) ? data.suggestions : [data.suggestions || "응답을 받지 못했습니다."];
     
   } catch (error) {
     clearTimeout(timeoutId);
-    console.error('❌ API 호출 실패:', error);
+    debugLog(`API 호출 실패 [${requestId}]:`, error.message);
     
     if (error.name === 'AbortError') {
       return ["요청 시간이 초과되었습니다.\n서버가 잠시 느릴 수 있습니다."];
@@ -335,11 +396,11 @@ async function getSuggestions(input) {
 function speak(text) {
   if (!text || !text.trim()) return;
   
+  debugLog('음성 재생 시작:', text.substring(0, 20) + '...');
+  
   try {
-    // 기존 음성 중지
     speechSynthesis.cancel();
     
-    // iOS Safari에서 음성 합성을 위한 지연
     setTimeout(() => {
       const msg = new SpeechSynthesisUtterance(text.trim());
       msg.lang = "ko-KR";
@@ -347,15 +408,15 @@ function speak(text) {
       msg.pitch = 1.0;
       msg.volume = 0.8;
       
-      msg.onstart = () => console.log('🔊 음성 재생 시작');
-      msg.onend = () => console.log('🔇 음성 재생 완료');
-      msg.onerror = (event) => console.error('🚨 음성 재생 오류:', event.error);
+      msg.onstart = () => debugLog('🔊 음성 재생 시작됨');
+      msg.onend = () => debugLog('🔇 음성 재생 완료됨');
+      msg.onerror = (event) => debugLog('🚨 음성 재생 오류:', event.error);
       
       speechSynthesis.speak(msg);
     }, 100);
     
   } catch (error) {
-    console.error('음성 재생 실패:', error);
+    debugLog('음성 재생 실패:', error.message);
   }
 }
 
@@ -368,24 +429,26 @@ function showGuidanceMessage() {
 
 // 페이지 생명주기 이벤트
 window.addEventListener("beforeunload", cleanup);
-window.addEventListener("pagehide", cleanup); // iOS Safari 전용
+window.addEventListener("pagehide", cleanup);
 
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) {
+    debugLog('페이지가 숨겨짐 - cleanup 실행');
     cleanup();
   }
 });
 
-// 버튼 이벤트 (iOS Safari 호환성 강화)
+// 버튼 이벤트
 micButton.addEventListener("touchstart", (e) => {
   e.preventDefault();
+  debugLog('touchstart 이벤트');
 });
 
 micButton.addEventListener("touchend", (e) => {
   e.preventDefault();
   e.stopPropagation();
+  debugLog('touchend 이벤트');
   
-  // 짧은 지연 후 실행 (iOS Safari 터치 이벤트 최적화)
   setTimeout(() => {
     startListening();
   }, 50);
@@ -393,10 +456,18 @@ micButton.addEventListener("touchend", (e) => {
 
 micButton.addEventListener("click", (e) => {
   e.preventDefault();
+  debugLog('click 이벤트');
   startListening();
 });
 
 // 초기화 로그
-console.log('🚀 Voice Assist 스크립트 로드 완료');
-console.log('📱 User Agent:', navigator.userAgent);
-console.log('🎤 Speech Recognition 지원:', 'webkitSpeechRecognition' in window);
+debugLog('🚀 Voice Assist 스크립트 로드 완료');
+debugLog('📱 User Agent:', navigator.userAgent);
+debugLog('🎤 Speech Recognition 지원:', 'webkitSpeechRecognition' in window);
+
+// 디버그 모드 안내
+if (window.location.search.includes('debug=1')) {
+  debugLog('🔍 디버그 모드 활성화됨');
+} else {
+  console.log('💡 디버그 모드를 보려면 URL에 ?debug=1 을 추가하세요');
+}
