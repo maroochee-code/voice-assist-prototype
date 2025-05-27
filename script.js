@@ -13,14 +13,17 @@ statusText.style.fontSize = "16px";
 
 // 🎧 듣기 시작
 function startListening() {
-  recognition.start();
-
-  // UI 업데이트
-  listenButton.textContent = "🎙 듣는 중...";
-  listenButton.disabled = true;
-  document.body.insertBefore(statusText, listenButton);
-  statusText.textContent = "🎤 듣고 있어요... 말해보세요.";
-}
+    listenButton.textContent = "🎙 듣는 중...";
+    listenButton.disabled = true;
+  
+    statusText.textContent = "🎤 듣고 있어요... 말해보세요.";
+    document.body.insertBefore(statusText, listenButton);
+  
+    // 🔁 이 타이밍 보정이 핵심
+    setTimeout(() => {
+      recognition.start();
+    }, 1500);
+  }
 
 // 🎤 음성 인식 결과 수신
 recognition.onresult = async function(event) {
