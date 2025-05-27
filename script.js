@@ -1,6 +1,5 @@
-let recognition = new webkitSpeechRecognition() || new SpeechRecognition();
-recognition.lang = "ko-KR";
-recognition.interimResults = false;
+let recognition = null;
+let isListening = false;
 
 const micButton = document.getElementById("mic-btn");
 const list = document.getElementById("suggestions");
@@ -21,17 +20,14 @@ guideText.style.color = "#666";
 guideText.style.fontStyle = "italic";
 guideText.style.animation = "fadein 0.8s ease-in";
 
-let isListening = false;
-
-// 🔓 iOS 마이크 권한 유도용 트리거
+// iOS 첫 터치에서 권한 팝업 유도
 window.addEventListener("touchstart", () => {
   try {
     const temp = new webkitSpeechRecognition();
     temp.start();
     temp.abort();
-    console.log("🔐 마이크 권한 요청됨");
   } catch (e) {
-    console.warn("🎤 권한 요청 실패:", e);
+    console.warn("🔐 권한 요청 실패:", e);
   }
 }, { once: true });
 
@@ -43,52 +39,19 @@ function startListening() {
   document.body.insertBefore(statusText, micButton);
   statusText.textContent = "🎤 듣고 있어요... 손을 떼면 멈춰요.";
 
-  try {
-    recognition = new webkitSpeechRecognition(); // iOS 안정화: 매번 새 인스턴스
-    recognition.lang = "ko-KR";
-    recognition.interimResults = false;
-    bindRecognitionEvents(recognition);
-    recognition.start();
-    console.log("🎙 마이크 시작됨");
-  } catch (err) {
-    console.warn("🎤 마이크 시작 실패:", err);
-    isListening = false;
-  }
-}
+  recognition = new webkitSpeechRecognition();
+  recognition.lang = "ko-KR";
+  recognition.interimResults = false;
 
-function stopListening() {
-  if (!isListening) return;
-  isListening = false;
-
-  micButton.textContent = "🎤 누르고 말하세요";
-  try {
-    recognition.stop();
-    console.log("🛑 마이크 정지 요청됨");
-  } catch (e) {
-    console.warn("🧨 마이크 정지 실패:", e);
-  }
-
-  if (statusText && statusText.parentNode) {
-    statusText.parentNode.removeChild(statusText);
-  }
-  const guide = document.getElementById("guide");
-  if (guide && guide.parentNode) {
-    guide.parentNode.removeChild(guide);
-  }
-}
-
-function bindRecognitionEvents(recognition) {
   recognition.onresult = async function (event) {
     if (!event.results || !event.results[0] || !event.results[0][0]) {
-      console.warn("❌ 인식 결과 없음");
+      console.warn("❌ 결과 없음");
       return;
     }
-
     const text = event.results[0][0].transcript;
-    console.log("🧠 인식된 텍스트:", text);
+    console.log("🧠 인식:", text);
 
     list.innerHTML = "";
-
     const suggestions = await getSuggestions(text);
     suggestions.forEach(msg => {
       const li = document.createElement("li");
@@ -101,21 +64,51 @@ function bindRecognitionEvents(recognition) {
   };
 
   recognition.onerror = function (event) {
-    console.warn("🎤 Speech error:", event.error);
+    console.warn("❗ 오류:", event.error);
     if (event.error === "not-allowed") {
-      alert("❗ 마이크 권한이 거부되었습니다.\nSafari 설정에서 마이크를 허용해 주세요.");
+      alert("마이크 권한이 차단되었습니다.\n설정에서 허용해 주세요.");
     }
     stopListening();
   };
 
   recognition.onend = function () {
-    console.log("🛑 마이크 세션 종료됨");
+    console.log("🛑 인식 종료");
     stopListening();
   };
+
+  try {
+    recognition.start();
+    console.log("🎙 마이크 시작됨");
+  } catch (e) {
+    console.warn("❌ 시작 실패:", e);
+    stopListening();
+  }
+}
+
+function stopListening() {
+  if (!isListening) return;
+  isListening = false;
+
+  micButton.textContent = "🎤 누르고 말하세요";
+  try {
+    recognition && recognition.stop();
+  } catch (e) {
+    console.warn("🧨 종료 실패:", e);
+  }
+
+  if (statusText.parentNode) {
+    statusText.parentNode.removeChild(statusText);
+  }
+
+  const guide = document.getElementById("guide");
+  if (guide && guide.parentNode) {
+    guide.parentNode.removeChild(guide);
+  }
+
+  recognition = null;
 }
 
 async function getSuggestions(input) {
-  console.log("📨 GPT 요청:", input);
   try {
     const response = await fetch("https://voice-assist-backend.onrender.com/ask-gpt", {
       method: "POST",
@@ -126,7 +119,7 @@ async function getSuggestions(input) {
     const data = await response.json();
     return data.suggestions || [];
   } catch (err) {
-    console.error("GPT 요청 실패:", err);
+    console.error("GPT 오류:", err);
     return ["죄송합니다. 응답에 실패했습니다."];
   }
 }
@@ -144,14 +137,15 @@ function showGuidanceMessage() {
   }
 }
 
+// 안전한 세션 종료 처리
 window.addEventListener("beforeunload", stopListening);
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) stopListening();
 });
 
-// ✅ 모바일 + PC 이벤트 처리 개선
+// 모바일 및 PC 대응 이벤트 등록
 micButton.addEventListener("touchstart", (e) => {
-  e.preventDefault(); // iOS 포커스/탭 이벤트 방지
+  e.preventDefault();
   startListening();
 });
 micButton.addEventListener("touchend", stopListening);
