@@ -22,7 +22,7 @@ function startListening() {
     // 🔁 이 타이밍 보정이 핵심
     setTimeout(() => {
       recognition.start();
-    }, 1000);
+    }, 500);
   }
 
 // 🎤 음성 인식 결과 수신
