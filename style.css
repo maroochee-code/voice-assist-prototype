@@ -1,300 +1,95 @@
-/* iOS Safari 최적화 및 전체적인 개선 */
-
-* {
-  box-sizing: border-box;
-}
-
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  margin: 0;
-  padding: 1rem;
-  background: #f9f9f9;
-  max-width: 480px;
-  margin: 0 auto;
-  min-height: 100vh;
-  
-  /* iOS Safari 스크롤 최적화 */
-  -webkit-overflow-scrolling: touch;
-  overflow-x: hidden;
-  
-  /* iOS Safari 확대/축소 방지 */
-  touch-action: manipulation;
-  -webkit-text-size-adjust: 100%;
-}
-
-/* iOS Safari의 safe area 대응 */
-@supports(padding: max(0px)) {
-  body {
-    padding-left: max(1rem, env(safe-area-inset-left));
-    padding-right: max(1rem, env(safe-area-inset-right));
-    padding-bottom: max(1rem, env(safe-area-inset-bottom));
-  }
-}
-
-main {
-  min-height: calc(100vh - 2rem);
-  display: flex;
-  flex-direction: column;
-}
-
-h2 {
-  font-size: 1.5rem;
-  text-align: center;
-  margin: 1rem 0;
-  color: #333;
-  font-weight: 600;
-}
-
-.guide-text {
-  text-align: center;
-  font-size: 13px;
-  color: #666;
-  margin: 1rem 0;
-  line-height: 1.4;
-}
-
-#mic-btn {
-  position: fixed;
-  bottom: 20px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: calc(100% - 2rem);
-  max-width: 440px;
-  padding: 1rem;
-  font-size: 1.1rem;
-  font-weight: 600;
-  background: linear-gradient(135deg, #4caf50, #45a049);
-  color: white;
-  border: none;
-  border-radius: 12px;
-  z-index: 1000;
-  text-align: center;
-  cursor: pointer;
-  
-  /* iOS 터치 최적화 */
-  -webkit-tap-highlight-color: transparent;
-  -webkit-touch-callout: none;
-  -webkit-user-select: none;
-  touch-action: manipulation;
-  user-select: none;
-  
-  /* 접근성 */
-  outline: none;
-  transition: all 0.2s ease;
-  
-  /* 그림자 효과 */
-  box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
-}
-
-#mic-btn:hover,
-#mic-btn:focus {
-  background: linear-gradient(135deg, #45a049, #3d8b40);
-  transform: translateX(-50%) translateY(-2px);
-  box-shadow: 0 6px 16px rgba(76, 175, 80, 0.4);
-}
-
-#mic-btn:active {
-  background: linear-gradient(135deg, #3d8b40, #2e7d32);
-  transform: translateX(-50%) translateY(0px);
-  box-shadow: 0 2px 8px rgba(76, 175, 80, 0.3);
-}
-
-/* 마이크 버튼 상태별 스타일 */
-#mic-btn[data-state="listening"] {
-  background: linear-gradient(135deg, #ff9800, #f57c00);
-  animation: pulse 1.5s infinite;
-}
-
-#mic-btn[data-state="processing"] {
-  background: linear-gradient(135deg, #2196f3, #1976d2);
-  cursor: not-allowed;
-}
-
-@keyframes pulse {
-  0% { box-shadow: 0 4px 12px rgba(255, 152, 0, 0.3); }
-  50% { box-shadow: 0 4px 20px rgba(255, 152, 0, 0.6); }
-  100% { box-shadow: 0 4px 12px rgba(255, 152, 0, 0.3); }
-}
-
-ul {
-  list-style-type: none;
-  padding: 0;
-  margin: 0 0 100px 0; /* 버튼 공간 확보 */
-  flex-grow: 1;
-}
-
-li {
-  background-color: white;
-  margin: 0.5rem 0;
-  padding: 1rem;
-  font-size: 1rem;
-  line-height: 1.5;
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-  transition: all 0.2s ease;
-  cursor: pointer;
-  
-  /* iOS 터치 최적화 */
-  -webkit-tap-highlight-color: transparent;
-  touch-action: manipulation;
-  
-  /* 접근성 */
-  min-height: 44px; /* iOS 권장 터치 영역 */
-  display: flex;
-  align-items: center;
-}
-
-li:hover,
-li:focus {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 16px rgba(0,0,0,0.12);
-  background-color: #fafafa;
-}
-
-li:active {
-  transform: translateY(0);
-  box-shadow: 0 2px 4px rgba(0,0,0,0.08);
-  background-color: #f0f0f0;
-}
-
-/* 상태 메시지 스타일 */
-#status {
-  text-align: center;
-  font-weight: bold;
-  margin: 1rem 0;
-  font-size: 16px;
-  padding: 0.5rem;
-  border-radius: 8px;
-  animation: fadeIn 0.3s ease;
-}
-
-#guide {
-  text-align: center;
-  font-size: 14px;
-  color: #666;
-  margin: 1rem 0;
-  font-style: italic;
-  animation: fadeIn 0.8s ease-in;
-  line-height: 1.4;
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-/* 오프라인 메시지 */
-#offline-message {
-  position: fixed;
-  top: 20px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: #f44336;
-  color: white;
-  padding: 0.5rem 1rem;
-  border-radius: 8px;
-  font-size: 14px;
-  z-index: 1001;
-  animation: slideDown 0.3s ease;
-}
-
-@keyframes slideDown {
-  from { transform: translateX(-50%) translateY(-100%); }
-  to { transform: translateX(-50%) translateY(0); }
-}
-
-/* 반응형 디자인 */
-@media (max-width: 360px) {
-  body {
-    padding: 0.5rem;
+    font-family: sans-serif;
+    margin: 0;
+    padding: 1rem;
+    background: #f9f9f9;
+    max-width: 480px;
+    margin: auto;
   }
   
-  #mic-btn {
-    width: calc(100% - 1rem);
-    font-size: 1rem;
-    padding: 0.875rem;
-  }
-  
-  li {
-    padding: 0.875rem;
-    font-size: 0.95rem;
-  }
-}
-
-/* 가로 모드 대응 */
-@media (orientation: landscape) and (max-height: 500px) {
   h2 {
-    font-size: 1.25rem;
-    margin: 0.5rem 0;
+    font-size: 1.5rem;
+    text-align: center;
   }
   
-  .guide-text {
-    font-size: 12px;
-    margin: 0.5rem 0;
-  }
+  button {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 90%;
+    padding: 1rem;
+    font-size: 1.2rem;
+    background-color: #4caf50;
+    color: white;
+    border: none;
+    border-radius: 0.5rem;
+    z-index: 1000;
   
-  #mic-btn {
-    bottom: 10px;
-    padding: 0.75rem;
+    /* 🔧 iOS 대응 */
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+    user-select: none;
+  }
+
+  button:active {
+    background-color: #45a049;
   }
   
   ul {
-    margin-bottom: 80px;
-  }
-}
-
-/* 다크 모드 지원 */
-@media (prefers-color-scheme: dark) {
-  body {
-    background: #121212;
-    color: #e0e0e0;
-  }
-  
-  h2 {
-    color: #ffffff;
-  }
-  
-  .guide-text {
-    color: #b0b0b0;
+    list-style-type: none;
+    padding: 0;
+    margin-bottom: 80px; /* 버튼 공간 확보 */
   }
   
   li {
-    background-color: #1e1e1e;
-    color: #e0e0e0;
-    box-shadow: 0 2px 8px rgba(255,255,255,0.05);
+    background-color: white;
+    margin: 0.5rem 0;
+    padding: 1rem;
+    font-size: 1.1rem;
+    border-radius: 0.5rem;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    transition: transform 0.1s;
   }
   
-  li:hover,
-  li:focus {
-    background-color: #2a2a2a;
-    box-shadow: 0 4px 16px rgba(255,255,255,0.08);
+  li:hover {
+    transform: scale(1.02);
+    cursor: pointer;
   }
-  
-  li:active {
-    background-color: #333333;
-  }
-  
+
   #guide {
-    color: #b0b0b0;
+    text-align: center;
+    font-size: 14px;
+    color: #666;
+    margin-top: 8px;
+    font-style: italic;
+    animation: fadein 0.8s ease-in;
   }
-}
 
-/* 접근성 개선 */
-@media (prefers-reduced-motion: reduce) {
-  * {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+  @keyframes fadein {
+    from { opacity: 0; }
+    to { opacity: 1; }
   }
-}
-
-/* 포커스 표시 개선 */
-#mic-btn:focus-visible {
-  outline: 3px solid #81c784;
-  outline-offset: 2px;
-}
-
-li:focus-visible {
-  outline: 2px solid #4caf50;
-  outline-offset: 2px;
-}
+  
+  #mic-btn {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 90%;
+    padding: 1rem;
+    font-size: 1.2rem;
+    background-color: #4caf50;
+    color: white;
+    border: none;
+    border-radius: 0.5rem;
+    z-index: 1000;
+    text-align: center;
+  
+    /* iOS 대응 */
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+    user-select: none;
+  }
+  
+  

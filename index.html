@@ -2,42 +2,17 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-  
-  <!-- iOS Safari 최적화 -->
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <meta name="apple-mobile-web-app-title" content="Voice Assist">
-  <meta name="format-detection" content="telephone=no">
-  
-  <!-- PWA 지원 -->
-  <meta name="theme-color" content="#4caf50">
-  <meta name="msapplication-TileColor" content="#4caf50">
-  
-  <!-- 보안 강화 -->
-  <meta http-equiv="X-UA-Compatible" content="IE=edge">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self' https://voice-assist-backend.onrender.com https://www.google.com; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://voice-assist-backend.onrender.com wss://www.google.com;">
-  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="stylesheet" href="style.css">
   <title>Voice Assist</title>
 </head>
 <body>
-  <main>
-    <h2>🗣️ 음성 입력</h2>  
-    <div id="mic-btn" role="button" tabindex="0" aria-label="음성 입력 시작">
-      🎤 탭하여 말하기
-    </div>
-    <p class="guide-text">
-      버튼을 한 번 탭하고 말하세요. 3초 후 자동으로 인식이 종료됩니다.
-    </p>  
-    <ul id="suggestions" role="list" aria-live="polite"></ul>
-  </main>
-  
-  <!-- 오프라인 메시지 -->
-  <div id="offline-message" style="display: none;">
-    <p>🔌 인터넷 연결을 확인해주세요</p>
-  </div>
-  
+  <h2>🗣️ 음성 입력</h2>  
+  <div id="mic-btn" role="button" tabindex="0">🎤 탭하여 말하기</div>
+  <p style="text-align: center; font-size: 13px; color: #999;">
+    버튼을 한 번 탭하고 말하세요. 3초 후 자동으로 인식이 종료됩니다.
+  </p>  
+  <ul id="suggestions"></ul>
   <script src="script.js"></script>
 </body>
 </html>
