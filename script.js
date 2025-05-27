@@ -20,15 +20,13 @@ guideText.style.color = "#666";
 guideText.style.fontStyle = "italic";
 guideText.style.animation = "fadein 0.8s ease-in";
 
-// iOS 첫 터치에서 권한 팝업 유도
+// iOS 권한 요청 트리거
 window.addEventListener("touchstart", () => {
   try {
     const temp = new webkitSpeechRecognition();
     temp.start();
     temp.abort();
-  } catch (e) {
-    console.warn("🔐 권한 요청 실패:", e);
-  }
+  } catch (e) {}
 }, { once: true });
 
 function startListening() {
@@ -37,21 +35,17 @@ function startListening() {
 
   micButton.textContent = "🎙 듣는 중...";
   document.body.insertBefore(statusText, micButton);
-  statusText.textContent = "🎤 듣고 있어요... 손을 떼면 멈춰요.";
+  statusText.textContent = "🎤 말하세요... 3초 후 인식이 종료됩니다.";
 
   recognition = new webkitSpeechRecognition();
   recognition.lang = "ko-KR";
   recognition.interimResults = false;
 
   recognition.onresult = async function (event) {
-    if (!event.results || !event.results[0] || !event.results[0][0]) {
-      console.warn("❌ 결과 없음");
-      return;
-    }
+    if (!event.results?.[0]?.[0]) return;
     const text = event.results[0][0].transcript;
-    console.log("🧠 인식:", text);
-
     list.innerHTML = "";
+
     const suggestions = await getSuggestions(text);
     suggestions.forEach(msg => {
       const li = document.createElement("li");
@@ -64,42 +58,39 @@ function startListening() {
   };
 
   recognition.onerror = function (event) {
-    console.warn("❗ 오류:", event.error);
     if (event.error === "not-allowed") {
-      alert("마이크 권한이 차단되었습니다.\n설정에서 허용해 주세요.");
+      alert("마이크 권한이 차단되었습니다. 설정에서 허용해주세요.");
     }
     stopListening();
   };
 
   recognition.onend = function () {
-    console.log("🛑 인식 종료");
     stopListening();
   };
 
   try {
     recognition.start();
-    console.log("🎙 마이크 시작됨");
+    console.log("🎙 인식 시작됨");
   } catch (e) {
-    console.warn("❌ 시작 실패:", e);
     stopListening();
   }
+
+  setTimeout(() => {
+    try {
+      recognition.stop();
+    } catch (e) {}
+  }, 3000); // 자동 종료
 }
 
 function stopListening() {
   if (!isListening) return;
   isListening = false;
 
-  micButton.textContent = "🎤 누르고 말하세요";
-  try {
-    recognition && recognition.stop();
-  } catch (e) {
-    console.warn("🧨 종료 실패:", e);
-  }
+  micButton.textContent = "🎤 탭하여 말하기";
 
   if (statusText.parentNode) {
     statusText.parentNode.removeChild(statusText);
   }
-
   const guide = document.getElementById("guide");
   if (guide && guide.parentNode) {
     guide.parentNode.removeChild(guide);
@@ -115,11 +106,9 @@ async function getSuggestions(input) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text: input })
     });
-
     const data = await response.json();
     return data.suggestions || [];
-  } catch (err) {
-    console.error("GPT 오류:", err);
+  } catch {
     return ["죄송합니다. 응답에 실패했습니다."];
   }
 }
@@ -131,27 +120,15 @@ function speak(text) {
 }
 
 function showGuidanceMessage() {
-  guideText.textContent = "원하는 말이 없으면 다시 말씀해주세요.";
+  guideText.textContent = "원하는 말이 없으면 다시 탭해 주세요.";
   if (!document.getElementById("guide")) {
     list.parentNode.insertBefore(guideText, list.nextSibling);
   }
 }
 
-// 안전한 세션 종료 처리
 window.addEventListener("beforeunload", stopListening);
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) stopListening();
 });
 
-// 모바일 및 PC 대응 이벤트 등록
-micButton.addEventListener("touchstart", (e) => {
-  e.preventDefault();
-  startListening();
-});
-micButton.addEventListener("touchend", stopListening);
-micButton.addEventListener("touchcancel", stopListening);
-micButton.addEventListener("mousedown", (e) => {
-  e.preventDefault();
-  startListening();
-});
-micButton.addEventListener("mouseup", stopListening);
+micButton.addEventListener("click", startListening);
