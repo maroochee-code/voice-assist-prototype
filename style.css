@@ -25,6 +25,15 @@ body {
     border: none;
     border-radius: 0.5rem;
     z-index: 1000;
+  
+    /* 🔧 iOS 대응 */
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+    user-select: none;
+  }
+
+  button:active {
+    background-color: #45a049;
   }
   
   ul {

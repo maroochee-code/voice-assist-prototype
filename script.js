@@ -1,4 +1,4 @@
-const recognition = new webkitSpeechRecognition() || new SpeechRecognition();
+let recognition = new webkitSpeechRecognition() || new SpeechRecognition();
 recognition.lang = "ko-KR";
 recognition.interimResults = false;
 
@@ -22,9 +22,8 @@ guideText.style.fontStyle = "italic";
 guideText.style.animation = "fadein 0.8s ease-in";
 
 let isListening = false;
-let hasPermission = false;
 
-// 🔓 iPhone Safari 권한 팝업을 강제로 띄우는 터치 트리거
+// 🔓 iOS 마이크 권한 유도용 트리거
 window.addEventListener("touchstart", () => {
   try {
     const temp = new webkitSpeechRecognition();
@@ -38,13 +37,17 @@ window.addEventListener("touchstart", () => {
 
 function startListening() {
   if (isListening) return;
-
   isListening = true;
+
   micButton.textContent = "🎙 듣는 중...";
   document.body.insertBefore(statusText, micButton);
   statusText.textContent = "🎤 듣고 있어요... 손을 떼면 멈춰요.";
 
   try {
+    recognition = new webkitSpeechRecognition(); // iOS 안정화: 매번 새 인스턴스
+    recognition.lang = "ko-KR";
+    recognition.interimResults = false;
+    bindRecognitionEvents(recognition);
     recognition.start();
     console.log("🎙 마이크 시작됨");
   } catch (err) {
@@ -74,40 +77,42 @@ function stopListening() {
   }
 }
 
-recognition.onresult = async function (event) {
-  if (!event.results || !event.results[0] || !event.results[0][0]) {
-    console.warn("❌ 인식 결과 없음");
-    return;
-  }
+function bindRecognitionEvents(recognition) {
+  recognition.onresult = async function (event) {
+    if (!event.results || !event.results[0] || !event.results[0][0]) {
+      console.warn("❌ 인식 결과 없음");
+      return;
+    }
 
-  const text = event.results[0][0].transcript;
-  console.log("🧠 인식된 텍스트:", text);
+    const text = event.results[0][0].transcript;
+    console.log("🧠 인식된 텍스트:", text);
 
-  list.innerHTML = "";
+    list.innerHTML = "";
 
-  const suggestions = await getSuggestions(text);
-  suggestions.forEach(msg => {
-    const li = document.createElement("li");
-    li.textContent = msg;
-    li.onclick = () => speak(msg);
-    list.appendChild(li);
-  });
+    const suggestions = await getSuggestions(text);
+    suggestions.forEach(msg => {
+      const li = document.createElement("li");
+      li.textContent = msg;
+      li.onclick = () => speak(msg);
+      list.appendChild(li);
+    });
 
-  showGuidanceMessage();
-};
+    showGuidanceMessage();
+  };
 
-recognition.onerror = function (event) {
-  console.warn("🎤 Speech error:", event.error);
-  if (event.error === "not-allowed") {
-    alert("❗ 마이크 권한이 거부되었습니다.\nSafari 설정에서 마이크를 허용해 주세요.");
-  }
-  stopListening();
-};
+  recognition.onerror = function (event) {
+    console.warn("🎤 Speech error:", event.error);
+    if (event.error === "not-allowed") {
+      alert("❗ 마이크 권한이 거부되었습니다.\nSafari 설정에서 마이크를 허용해 주세요.");
+    }
+    stopListening();
+  };
 
-recognition.onend = function () {
-  console.log("🛑 마이크 세션 종료됨");
-  stopListening();
-};
+  recognition.onend = function () {
+    console.log("🛑 마이크 세션 종료됨");
+    stopListening();
+  };
+}
 
 async function getSuggestions(input) {
   console.log("📨 GPT 요청:", input);
@@ -144,8 +149,15 @@ document.addEventListener("visibilitychange", () => {
   if (document.hidden) stopListening();
 });
 
-// 📱 모바일 + PC 이벤트 바인딩
-micButton.addEventListener("mousedown", startListening);
-micButton.addEventListener("mouseup", stopListening);
-micButton.addEventListener("touchstart", startListening);
+// ✅ 모바일 + PC 이벤트 처리 개선
+micButton.addEventListener("touchstart", (e) => {
+  e.preventDefault(); // iOS 포커스/탭 이벤트 방지
+  startListening();
+});
 micButton.addEventListener("touchend", stopListening);
+micButton.addEventListener("touchcancel", stopListening);
+micButton.addEventListener("mousedown", (e) => {
+  e.preventDefault();
+  startListening();
+});
+micButton.addEventListener("mouseup", stopListening);
