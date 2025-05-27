@@ -4,6 +4,11 @@ let recognitionTimeout = null;
 let isProcessing = false;
 let sessionId = Date.now();
 
+// 🚨 중복 이벤트 방지를 위한 플래그들
+let isButtonDisabled = false;
+let lastClickTime = 0;
+const CLICK_DEBOUNCE_MS = 1000; // 1초 내 중복 클릭 방지
+
 const micButton = document.getElementById("mic-btn");
 const list = document.getElementById("suggestions");
 
@@ -93,14 +98,41 @@ document.addEventListener('touchstart', initializeSpeechRecognition, { once: tru
 document.addEventListener('click', initializeSpeechRecognition, { once: true });
 
 function startListening() {
-  debugLog('startListening 호출됨', { isListening, isProcessing });
+  const currentTime = Date.now();
   
-  if (isListening || isProcessing) {
-    debugLog('이미 실행 중이므로 중단');
+  debugLog('startListening 호출됨', { 
+    isListening, 
+    isProcessing, 
+    isButtonDisabled,
+    timeSinceLastClick: currentTime - lastClickTime 
+  });
+  
+  // 🚨 중복 실행 방지 강화
+  if (isListening || isProcessing || isButtonDisabled) {
+    debugLog('중복 실행 방지로 인해 중단', {
+      isListening,
+      isProcessing, 
+      isButtonDisabled
+    });
     return;
   }
   
+  // 디바운스 체크
+  if (currentTime - lastClickTime < CLICK_DEBOUNCE_MS) {
+    debugLog('디바운스로 인해 중단', {
+      timeDiff: currentTime - lastClickTime,
+      required: CLICK_DEBOUNCE_MS
+    });
+    return;
+  }
+  
+  lastClickTime = currentTime;
+  
   if (!checkSpeechRecognitionSupport()) return;
+  
+  // 버튼 비활성화
+  isButtonDisabled = true;
+  enableButtonAfterDelay();
   
   cleanup();
   
@@ -111,20 +143,17 @@ function startListening() {
   try {
     recognition = new webkitSpeechRecognition();
     
-    // iOS Safari 최적화 설정
     recognition.lang = "ko-KR";
     recognition.interimResults = false;
-    recognition.maxAlternatives = 3; // 대안 늘리기
+    recognition.maxAlternatives = 3;
     recognition.continuous = false;
     
-    // 🔧 iOS Safari onresult 누락 대응: 이벤트 핸들러 먼저 등록
     let hasResult = false;
     let resultTimeout = null;
     
     recognition.onstart = function() {
       debugLog('🎙️ onstart 이벤트 발생');
       
-      // 🚨 iOS Safari 대응: onstart 후 4초 내에 onresult가 없으면 강제로 처리
       resultTimeout = setTimeout(() => {
         if (!hasResult && isListening) {
           debugLog('⚠️ onresult 누락 감지 - 음성이 인식되지 않음');
@@ -150,7 +179,6 @@ function startListening() {
         return;
       }
       
-      // 여러 대안 중 가장 신뢰도 높은 것 선택
       let bestResult = null;
       let bestConfidence = 0;
       
@@ -172,7 +200,6 @@ function startListening() {
       const confidence = bestResult.confidence;
       debugLog('인식된 텍스트:', { text, confidence });
       
-      // 신뢰도가 너무 낮으면 재시도 요청
       if (confidence < 0.3) {
         debugLog('신뢰도가 낮음:', confidence);
         displaySuggestions(['음성 인식의 정확도가 낮습니다.', '조용한 곳에서 다시 시도해주세요.']);
@@ -211,7 +238,6 @@ function startListening() {
         resultTimeout = null;
       }
       
-      // onend가 발생했는데 결과가 없다면 사용자에게 알림
       if (!hasResult && isListening) {
         debugLog('🔇 음성이 감지되지 않음');
         displaySuggestions(['음성이 감지되지 않았습니다.', '마이크 가까이에서 명확하게 말해주세요.']);
@@ -226,7 +252,6 @@ function startListening() {
     debugLog('recognition.start() 호출');
     recognition.start();
     
-    // iOS Safari에서 3초 후 강제 종료 (기존 유지)
     recognitionTimeout = setTimeout(() => {
       if (recognition && isListening) {
         debugLog('⏰ 타임아웃으로 인식 종료');
@@ -243,6 +268,16 @@ function startListening() {
     handleRecognitionError('start-failed');
     stopListening();
   }
+}
+
+// 🚨 버튼 비활성화 해제 함수
+function enableButtonAfterDelay() {
+  setTimeout(() => {
+    if (!isListening && !isProcessing) {
+      isButtonDisabled = false;
+      debugLog('버튼 활성화됨');
+    }
+  }, 5000); // 5초 후 활성화
 }
 
 async function handleRecognizedText(text) {
@@ -267,6 +302,12 @@ async function handleRecognizedText(text) {
     isProcessing = false;
     stopListening();
     debugLog('handleRecognizedText 완료');
+    
+    // 🚨 완료 후 즉시 버튼 활성화
+    setTimeout(() => {
+      isButtonDisabled = false;
+      debugLog('처리 완료 - 버튼 활성화됨');
+    }, 1000);
   }
 }
 
@@ -394,7 +435,7 @@ function updateUI(state) {
       
     case 'idle':
     default:
-      micButton.textContent = "🎤 탭하여 말하기";
+      micButton.textContent = isButtonDisabled ? "⏳ 잠시만..." : "🎤 탭하여 말하기";
       break;
   }
 }
@@ -490,26 +531,34 @@ document.addEventListener("visibilitychange", () => {
   }
 });
 
+// 🚨 이벤트 리스너 중복 방지 강화
 micButton.addEventListener("touchstart", (e) => {
   e.preventDefault();
   debugLog('touchstart 이벤트');
-});
+}, { passive: false });
 
 micButton.addEventListener("touchend", (e) => {
   e.preventDefault();
   e.stopPropagation();
   debugLog('touchend 이벤트');
   
+  // iOS Safari 터치 이벤트 최적화
   setTimeout(() => {
     startListening();
-  }, 50);
-});
+  }, 100); // 50ms → 100ms로 증가
+}, { passive: false });
 
 micButton.addEventListener("click", (e) => {
   e.preventDefault();
+  e.stopPropagation();
   debugLog('click 이벤트');
   startListening();
-});
+}, { passive: false });
+
+// 🚨 추가 이벤트 중복 방지
+micButton.addEventListener("touchmove", (e) => {
+  e.preventDefault();
+}, { passive: false });
 
 debugLog('🚀 Voice Assist 스크립트 로드 완료');
 debugLog('📱 User Agent:', navigator.userAgent);
