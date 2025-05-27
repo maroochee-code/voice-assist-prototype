@@ -22,17 +22,35 @@ guideText.style.fontStyle = "italic";
 guideText.style.animation = "fadein 0.8s ease-in";
 
 let isListening = false;
+let hasPermission = false;
+
+// 🔓 iPhone Safari 권한 팝업을 강제로 띄우는 터치 트리거
+window.addEventListener("touchstart", () => {
+  try {
+    const temp = new webkitSpeechRecognition();
+    temp.start();
+    temp.abort();
+    console.log("🔐 마이크 권한 요청됨");
+  } catch (e) {
+    console.warn("🎤 권한 요청 실패:", e);
+  }
+}, { once: true });
 
 function startListening() {
   if (isListening) return;
-  isListening = true;
 
+  isListening = true;
   micButton.textContent = "🎙 듣는 중...";
   document.body.insertBefore(statusText, micButton);
   statusText.textContent = "🎤 듣고 있어요... 손을 떼면 멈춰요.";
 
-  recognition.start();
-  console.log("🎙 마이크 시작됨");
+  try {
+    recognition.start();
+    console.log("🎙 마이크 시작됨");
+  } catch (err) {
+    console.warn("🎤 마이크 시작 실패:", err);
+    isListening = false;
+  }
 }
 
 function stopListening() {
@@ -40,9 +58,12 @@ function stopListening() {
   isListening = false;
 
   micButton.textContent = "🎤 누르고 말하세요";
-  recognition.stop(); // ❗ 반드시 stop 사용
-
-  console.log("🛑 마이크 정지 요청됨");
+  try {
+    recognition.stop();
+    console.log("🛑 마이크 정지 요청됨");
+  } catch (e) {
+    console.warn("🧨 마이크 정지 실패:", e);
+  }
 
   if (statusText && statusText.parentNode) {
     statusText.parentNode.removeChild(statusText);
@@ -53,10 +74,9 @@ function stopListening() {
   }
 }
 
-// 🎯 result 1개만 남김
 recognition.onresult = async function (event) {
   if (!event.results || !event.results[0] || !event.results[0][0]) {
-    console.warn("❌ 결과 없음");
+    console.warn("❌ 인식 결과 없음");
     return;
   }
 
@@ -78,11 +98,14 @@ recognition.onresult = async function (event) {
 
 recognition.onerror = function (event) {
   console.warn("🎤 Speech error:", event.error);
+  if (event.error === "not-allowed") {
+    alert("❗ 마이크 권한이 거부되었습니다.\nSafari 설정에서 마이크를 허용해 주세요.");
+  }
   stopListening();
 };
 
 recognition.onend = function () {
-  console.log("🛑 마이크 종료됨");
+  console.log("🛑 마이크 세션 종료됨");
   stopListening();
 };
 
@@ -121,7 +144,7 @@ document.addEventListener("visibilitychange", () => {
   if (document.hidden) stopListening();
 });
 
-// ✅ 이벤트 중복 없이 1세트만 등록
+// 📱 모바일 + PC 이벤트 바인딩
 micButton.addEventListener("mousedown", startListening);
 micButton.addEventListener("mouseup", stopListening);
 micButton.addEventListener("touchstart", startListening);
